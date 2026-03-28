@@ -1,0 +1,66 @@
+protocol:
+  name: Herald Crypto Agent Execution Protocol
+  version: "1.0"
+
+execution_rules:
+  - id: EP-001
+    rule: Each agent must read global_context.yaml before starting any task.
+  - id: EP-002
+    rule: Each agent must produce all deliverables listed in the task definition.
+  - id: EP-003
+    rule: Each artifact must begin with a machine-readable index block (YAML front matter).
+  - id: EP-004
+    rule: Agents must not modify artifacts owned by other agents without explicit orchestrator approval.
+  - id: EP-005
+    rule: All depends_on artifacts must be available and reviewed before task execution begins.
+  - id: EP-006
+    rule: Implementation must respect all hard constraints from global_context.yaml.
+  - id: EP-007
+    rule: Each task must pass applicable review templates before promotion to next phase.
+  - id: EP-008
+    rule: The orchestrator blocks promotion when critical review findings remain unresolved.
+
+artifact_format:
+  index_block:
+    required_fields:
+      - artifact_id
+      - task_id
+      - agent_id
+      - created_at
+      - version
+      - status
+      - depends_on
+      - deliverables
+    example: |
+      ---
+      artifact_id: ARCH-001-target-architecture
+      task_id: ARCH-001
+      agent_id: chief_architect
+      created_at: 2026-03-28
+      version: "1.0"
+      status: draft
+      depends_on: [ORCH-001]
+      deliverables:
+        - target_architecture_document
+        - state_ownership_map
+        - component_boundary_diagram
+      ---
+
+review_workflow:
+  - After each implementation task, the orchestrator selects applicable review templates.
+  - Reviews are assigned to domain-appropriate reviewers.
+  - Each review outputs findings, severity, remediation, and explicit pass/fail.
+  - Critical findings must be resolved before the artifact is promoted.
+  - The orchestrator maintains a review log for audit purposes.
+
+phase_gates:
+  - Each phase ends with a launch-readiness gate (REVIEW-LAUNCH).
+  - The gate reviews scope completion, blockers, waivers, rollback posture, and residual risks.
+  - The orchestrator issues a go/no-go recommendation.
+  - No-go decisions must include specific blockers and remediation timeline.
+
+communication:
+  - Agents communicate through artifacts and the orchestrator.
+  - Direct agent-to-agent communication is not permitted.
+  - All decisions and trade-offs must be documented in ADRs.
+  - Escalations flow through the orchestrator to the chief architect.

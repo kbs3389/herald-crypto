@@ -1,0 +1,79 @@
+project:
+  name: Herald Crypto Exchange
+  objective: >
+    Implement an institutional-grade crypto exchange that supports spot, dated futures,
+    perpetuals, and European cash-settled options with an ultra-low-latency matching core,
+    bank-grade internal accounting, custody isolation, compliant institutional connectivity,
+    and multi-million-user scale.
+
+hard_constraints:
+  - id: HC-001
+    rule: One active writer per order book or shard. No active-active matching for the same book.
+  - id: HC-002
+    rule: Accepted stateful trading commands must be sequenced and replayable from an append-only journal.
+  - id: HC-003
+    rule: All economic events must land in an append-only immutable double-entry ledger.
+  - id: HC-004
+    rule: Balances are derived from ledger state and controlled reservations, not manual edits.
+  - id: HC-005
+    rule: The matching loop must not make synchronous database calls or remote network calls.
+  - id: HC-006
+    rule: Custody, wallet signing, and key material are isolated from public app and trading planes.
+  - id: HC-007
+    rule: Market makers, house accounts, and internal desks must not bypass risk, surveillance, or audit controls.
+  - id: HC-008
+    rule: Kubernetes is not allowed inside the matching hot path.
+  - id: HC-009
+    rule: Admin access requires phishing-resistant hardware-backed authentication and strong auditability.
+  - id: HC-010
+    rule: Retail auth should default to passkeys/WebAuthn-capable flows; admins require hardware keys.
+  - id: HC-011
+    rule: >
+      Institutional APIs must support cancel-on-disconnect, kill switch, drop copy,
+      idempotency, and strong sequencing semantics.
+  - id: HC-012
+    rule: Design for deterministic recovery, bounded failure domains, and explicit RTO/RPO targets.
+  - id: HC-013
+    rule: >
+      Compliant market making only. Do not propose spoofing, layering, wash trading,
+      quote stuffing, or any manipulative behavior.
+  - id: HC-014
+    rule: Day-1 portfolio margin must remain bounded to well-defined risk groups. No global unbounded cross-asset margin at launch.
+  - id: HC-015
+    rule: All admin changes, risk changes, wallet actions, listing changes, and compliance actions must be auditable.
+
+products:
+  - spot
+  - dated_futures
+  - perpetuals
+  - european_cash_settled_options
+
+architecture_principles:
+  - Single-writer per order book shard
+  - Event-sourced state with append-only journals
+  - Immutable double-entry ledger for all economic events
+  - Custody plane isolation from trading plane
+  - Deterministic matching with no external I/O in hot path
+  - Bounded failure domains with explicit RTO/RPO
+  - Zero-trust network segmentation
+  - Hardware-backed admin authentication
+  - Compliant-by-design market making
+
+technology_stack:
+  matching_engine: Rust (bare-metal, no GC)
+  core_services: Rust / Go
+  api_gateway: Go
+  web_frontend: TypeScript / React
+  data_pipeline: Python / Apache Flink
+  messaging: Aeron / custom ring buffer (hot path), Kafka (warm path)
+  persistence: PostgreSQL (OLTP), ClickHouse (OLAP), RocksDB (local state)
+  cache: Redis Cluster
+  observability: OpenTelemetry, Prometheus, Grafana, Jaeger
+  infrastructure: Terraform, Ansible (bare-metal matching), Kubernetes (non-hot-path)
+  ci_cd: GitHub Actions, ArgoCD
+  secrets: HashiCorp Vault
+
+agent_count: 27
+task_count: 60
+review_count: 6
+phase_count: 7
