@@ -9,7 +9,17 @@ description = "Institutional-grade multi-product crypto exchange"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "fastapi>=0.104",
+    "uvicorn[standard]>=0.24",
+    "pydantic>=2.5",
+    "sqlalchemy>=2.0",
+    "websockets>=12.0",
+    "python-jose[cryptography]>=3.3",
+    "passlib[bcrypt]>=1.7",
+    "python-multipart>=0.0.6",
+    "httpx>=0.25",
+]
 
 [project.optional-dependencies]
 dev = [
