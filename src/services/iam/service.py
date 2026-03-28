@@ -19,11 +19,13 @@ except ImportError:
     from python_jose import jwt
     JWTError = Exception
 
-try:
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-except ImportError:
-    pwd_context = None
+import bcrypt
+
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+def _verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed.encode())
 
 SECRET_KEY = "herald-crypto-secret-key-change-in-production"
 ALGORITHM = "HS256"
@@ -80,10 +82,7 @@ class IAMService:
         if username in self._users:
             return None
         user_id = str(uuid4())
-        if pwd_context:
-            hashed = pwd_context.hash(password)
-        else:
-            hashed = password  # Fallback if bcrypt not available
+        hashed = _hash_password(password)
         user = {
             "user_id": user_id,
             "username": username,
@@ -101,12 +100,8 @@ class IAMService:
         user = self._users.get(username)
         if user is None:
             return None
-        if pwd_context:
-            if not pwd_context.verify(password, user["password_hash"]):
-                return None
-        else:
-            if password != user["password_hash"]:
-                return None
+        if not _verify_password(password, user["password_hash"]):
+            return None
         return user
 
     def get_user(self, username: str) -> Optional[dict]:
