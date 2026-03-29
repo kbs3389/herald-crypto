@@ -20,7 +20,11 @@ export function useInstruments() {
 
   useEffect(() => {
     client.getInstruments()
-      .then((res) => setInstruments(res.instruments))
+      .then((res) => {
+        // API may return array directly or {instruments: [...]}
+        const list = Array.isArray(res) ? res : (res.instruments || []);
+        setInstruments(list);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);

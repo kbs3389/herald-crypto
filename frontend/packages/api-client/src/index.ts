@@ -53,7 +53,7 @@ export class HeraldApiClient {
   }
 
   // ── Market Data ────────────────────────────────────────────────────
-  async getInstruments(): Promise<{ instruments: Instrument[] }> {
+  async getInstruments(): Promise<Instrument[] | { instruments: Instrument[] }> {
     return this.request('GET', '/api/v1/instruments');
   }
 
