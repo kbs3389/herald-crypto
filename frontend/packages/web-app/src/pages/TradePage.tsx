@@ -7,6 +7,7 @@ import type { PlaceOrderRequest, Instrument, OrderResponse } from '@herald/share
 import { OrderBookView } from '../components/market/OrderBookView';
 import { RecentTrades } from '../components/market/RecentTrades';
 import { TickerBar } from '../components/market/TickerBar';
+import { CandlestickChart } from '../components/market/CandlestickChart';
 import { OrderEntry } from '../components/order/OrderEntry';
 import { useOrderBook, useRecentTrades, useTicker, useApiClient } from '../hooks/useApi';
 
@@ -39,37 +40,29 @@ export const TradePage: React.FC<Props> = ({
       <TickerBar ticker={ticker} instrumentId={selectedInstrument} />
       <div style={{
         flex: 1, display: 'grid',
-        gridTemplateColumns: '280px 1fr 320px',
+        gridTemplateColumns: '260px 1fr 300px',
         gap: 1, background: 'var(--border)', overflow: 'hidden',
       }}>
         {/* Left: Order Book */}
-        <div style={{ background: 'var(--bg-primary)' }}>
+        <div style={{ background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column' }}>
           <OrderBookView orderBook={orderBook} />
         </div>
 
-        {/* Center: Chart placeholder + Recent Trades */}
+        {/* Center: Chart + Recent Trades */}
         <div style={{
           background: 'var(--bg-primary)',
           display: 'flex', flexDirection: 'column',
         }}>
-          {/* Chart placeholder */}
+          {/* Real Candlestick Chart */}
           <div style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderBottom: '1px solid var(--border)', minHeight: 200,
+            flex: 1, minHeight: 300,
+            borderBottom: '1px solid var(--border)',
           }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 48, marginBottom: 8 }}>📈</div>
-              <div className="muted" style={{ fontSize: 13 }}>
-                TradingView Chart
-              </div>
-              <div className="muted" style={{ fontSize: 11 }}>
-                {selectedInstrument}
-              </div>
-            </div>
+            <CandlestickChart instrumentId={selectedInstrument} />
           </div>
 
           {/* Recent Trades */}
-          <div style={{ height: 300, overflow: 'hidden' }}>
+          <div style={{ height: 240, overflow: 'hidden' }}>
             <RecentTrades trades={trades} instrumentId={selectedInstrument} />
           </div>
         </div>

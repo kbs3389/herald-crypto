@@ -9,66 +9,115 @@ interface Props {
   instrumentId: string;
 }
 
+function formatVolume(vol: string | undefined): string {
+  if (!vol) return '0';
+  const n = parseFloat(vol);
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + 'B';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(2) + 'K';
+  return n.toFixed(2);
+}
+
+function formatPrice(val: string | null | undefined, digits = 2): string {
+  if (!val) return '--';
+  const n = parseFloat(val);
+  if (isNaN(n)) return '--';
+  return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
 export const TickerBar: React.FC<Props> = ({ ticker, instrumentId }) => {
   const parts = instrumentId.split('-');
   const base = parts[0] || '';
   const quote = parts[1] || '';
+  const type = parts[2] || 'SPOT';
   const changePct = ticker?.change_24h_pct ? parseFloat(ticker.change_24h_pct) : 0;
   const isPositive = changePct >= 0;
+  const lastPrice = ticker?.last_price || ticker?.best_bid;
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 24,
+      display: 'flex', alignItems: 'center', gap: 20,
       padding: '8px 16px', background: 'var(--bg-secondary)',
-      borderBottom: '1px solid var(--border)', fontSize: 13,
+      borderBottom: '1px solid var(--border)', fontSize: 12,
+      flexWrap: 'wrap',
     }}>
-      <div>
-        <span style={{ fontWeight: 700, fontSize: 16 }}>{base}/{quote}</span>
-        <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>
-          {parts[2] || 'SPOT'}
+      {/* Pair name */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
+          {base}/{quote}
+        </span>
+        <span style={{
+          fontSize: 10, padding: '1px 5px', borderRadius: 3,
+          background: type === 'SPOT' ? 'rgba(14,203,129,0.12)' : type === 'PERP' ? 'rgba(240,185,11,0.12)' : 'rgba(139,92,246,0.12)',
+          color: type === 'SPOT' ? 'var(--buy)' : type === 'PERP' ? 'var(--accent)' : '#8b5cf6',
+          fontWeight: 600,
+        }}>
+          {type === 'PERPETUAL' ? 'PERP' : type}
         </span>
       </div>
-      <div>
-        <span className="muted">Last </span>
-        <span className="mono" style={{ fontWeight: 600, fontSize: 15 }}>
-          {ticker?.last_price ? parseFloat(ticker.last_price).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
+
+      {/* Divider */}
+      <div style={{ width: 1, height: 24, background: 'var(--border)' }} />
+
+      {/* Last price */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <span className="mono" style={{
+          fontWeight: 700, fontSize: 18,
+          color: isPositive ? 'var(--buy)' : 'var(--sell)',
+        }}>
+          {formatPrice(lastPrice)}
         </span>
       </div>
-      <div>
-        <span className="muted">24h </span>
-        <span className={isPositive ? 'profit-text' : 'loss-text'} style={{ fontWeight: 500 }}>
+
+      {/* 24h change */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 500 }}>24h Change</span>
+        <span className="mono" style={{
+          fontWeight: 600, fontSize: 13,
+          color: isPositive ? 'var(--buy)' : 'var(--sell)',
+        }}>
           {isPositive ? '+' : ''}{changePct.toFixed(2)}%
         </span>
       </div>
-      <div>
-        <span className="muted">High </span>
-        <span className="mono">
-          {ticker?.high_24h ? parseFloat(ticker.high_24h).toLocaleString() : '—'}
+
+      {/* 24h High */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 500 }}>24h High</span>
+        <span className="mono" style={{ fontSize: 13 }}>
+          {formatPrice(ticker?.high_24h)}
         </span>
       </div>
-      <div>
-        <span className="muted">Low </span>
-        <span className="mono">
-          {ticker?.low_24h ? parseFloat(ticker.low_24h).toLocaleString() : '—'}
+
+      {/* 24h Low */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 500 }}>24h Low</span>
+        <span className="mono" style={{ fontSize: 13 }}>
+          {formatPrice(ticker?.low_24h)}
         </span>
       </div>
-      <div>
-        <span className="muted">Vol </span>
-        <span className="mono">
-          {ticker?.volume_24h ? parseFloat(ticker.volume_24h).toFixed(4) : '0'}
+
+      {/* 24h Volume */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 500 }}>24h Vol({base})</span>
+        <span className="mono" style={{ fontSize: 13 }}>
+          {formatVolume(ticker?.volume_24h)}
         </span>
       </div>
-      <div>
-        <span className="muted">Bid </span>
-        <span className="mono buy-text">
-          {ticker?.best_bid ? parseFloat(ticker.best_bid).toLocaleString() : '—'}
-        </span>
-      </div>
-      <div>
-        <span className="muted">Ask </span>
-        <span className="mono sell-text">
-          {ticker?.best_ask ? parseFloat(ticker.best_ask).toLocaleString() : '—'}
-        </span>
+
+      {/* Bid / Ask */}
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 500 }}>Bid</span>
+          <span className="mono buy-text" style={{ fontSize: 13, fontWeight: 600 }}>
+            {formatPrice(ticker?.best_bid)}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 500 }}>Ask</span>
+          <span className="mono sell-text" style={{ fontSize: 13, fontWeight: 600 }}>
+            {formatPrice(ticker?.best_ask)}
+          </span>
+        </div>
       </div>
     </div>
   );

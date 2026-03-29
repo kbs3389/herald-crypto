@@ -561,15 +561,22 @@ async def get_ticker(instrument_id: str):
         raise HTTPException(404, f"Instrument {instrument_id} not found")
     stats = market_data.get_ticker_stats(instrument_id)
     binance_price = binance_client.get_price_for_instrument(instrument_id)
+    binance_24h = binance_client.get_24h_stats(instrument_id)
+    # Prefer Binance 24h data over local stats
+    last_price = binance_24h.get("lastPrice") if binance_24h else stats.get("last_price")
+    volume_24h = binance_24h.get("volume") if binance_24h else stats.get("volume_24h", "0")
+    high_24h = binance_24h.get("highPrice") if binance_24h else stats.get("high_24h")
+    low_24h = binance_24h.get("lowPrice") if binance_24h else stats.get("low_24h")
+    change_pct = binance_24h.get("priceChangePercent") if binance_24h else stats.get("change_24h_pct", "0")
     return {
         "instrument_id": instrument_id,
         "best_bid": str(book.best_bid) if book.best_bid else None,
         "best_ask": str(book.best_ask) if book.best_ask else None,
-        "last_price": stats.get("last_price"),
-        "volume_24h": stats.get("volume_24h", "0"),
-        "high_24h": stats.get("high_24h"),
-        "low_24h": stats.get("low_24h"),
-        "change_24h_pct": stats.get("change_24h_pct", "0"),
+        "last_price": last_price or (str(binance_price) if binance_price else None),
+        "volume_24h": volume_24h or "0",
+        "high_24h": high_24h,
+        "low_24h": low_24h,
+        "change_24h_pct": change_pct or "0",
         "binance_price": str(binance_price) if binance_price else None,
         "timestamp": datetime.utcnow().isoformat(),
     }
@@ -578,6 +585,58 @@ async def get_ticker(instrument_id: str):
 @app.get("/api/v1/ticker/{instrument_id}")
 async def get_ticker_alt(instrument_id: str):
     return await get_ticker(instrument_id)
+
+
+@app.get("/api/v1/market/{instrument_id}/klines")
+async def get_klines(
+    instrument_id: str,
+    interval: str = Query(default="1h", regex="^(1m|5m|15m|1h|4h|1d)$"),
+    limit: int = Query(default=100, le=500),
+):
+    """Get candlestick/kline data from Binance."""
+    raw = await binance_client.fetch_klines(instrument_id, interval, limit)
+    if raw is None:
+        # Return synthetic candles from fallback price
+        bp = FALLBACK_PRICES.get(instrument_id, Decimal("100"))
+        candles = []
+        import time as _time
+        now = int(_time.time() * 1000)
+        ms_per = {"1m": 60000, "5m": 300000, "15m": 900000,
+                  "1h": 3600000, "4h": 14400000, "1d": 86400000}
+        step = ms_per.get(interval, 3600000)
+        import random as _rand
+        for i in range(limit):
+            t = now - (limit - i) * step
+            noise = Decimal(str(_rand.uniform(-0.005, 0.005)))
+            o = float(bp * (1 + noise))
+            c = float(bp * (1 + Decimal(str(_rand.uniform(-0.005, 0.005)))))
+            h = max(o, c) * (1 + _rand.uniform(0, 0.003))
+            lo = min(o, c) * (1 - _rand.uniform(0, 0.003))
+            v = _rand.uniform(10, 500)
+            candles.append({"time": t, "open": round(o, 2), "high": round(h, 2),
+                            "low": round(lo, 2), "close": round(c, 2), "volume": round(v, 2)})
+        return candles
+    # Format Binance klines: [openTime, open, high, low, close, volume, ...]
+    candles = []
+    for k in raw:
+        candles.append({
+            "time": k[0],
+            "open": float(k[1]),
+            "high": float(k[2]),
+            "low": float(k[3]),
+            "close": float(k[4]),
+            "volume": float(k[5]),
+        })
+    return candles
+
+
+@app.get("/api/v1/klines/{instrument_id}")
+async def get_klines_alt(
+    instrument_id: str,
+    interval: str = Query(default="1h", regex="^(1m|5m|15m|1h|4h|1d)$"),
+    limit: int = Query(default=100, le=500),
+):
+    return await get_klines(instrument_id, interval, limit)
 
 
 # ---------------------------------------------------------------------------

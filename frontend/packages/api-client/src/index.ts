@@ -6,7 +6,7 @@
  */
 
 import type {
-  AuthResponse, Balances, HealthStatus, Instrument, LoginRequest,
+  AuthResponse, Balances, HealthStatus, Instrument, Kline, LoginRequest,
   OrderBook, OrderResponse, PlaceOrderRequest, RegisterRequest,
   SystemStats, Ticker, Trade, Transaction,
 } from '@herald/shared';
@@ -67,6 +67,10 @@ export class HeraldApiClient {
 
   async getTicker(instrumentId: string): Promise<Ticker> {
     return this.request('GET', `/api/v1/market/${instrumentId}/ticker`);
+  }
+
+  async getKlines(instrumentId: string, interval = '1h', limit = 100): Promise<Kline[]> {
+    return this.request('GET', `/api/v1/market/${instrumentId}/klines?interval=${interval}&limit=${limit}`);
   }
 
   // ── Trading ────────────────────────────────────────────────────────

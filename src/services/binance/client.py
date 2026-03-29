@@ -46,6 +46,7 @@ class BinanceClient:
         self._running = False
         self._price_callbacks: list[Callable] = []
         self._latest_prices: dict[str, Decimal] = {}
+        self._24h_stats: dict[str, dict] = {}
 
     async def fetch_prices(self) -> dict[str, Decimal]:
         """Fetch current prices from Binance REST API."""
@@ -72,6 +73,13 @@ class BinanceClient:
         if binance_sym is None:
             return None
         return self._latest_prices.get(binance_sym)
+
+    def get_24h_stats(self, instrument_id: str) -> Optional[dict]:
+        """Get cached 24h ticker stats for an instrument (from WS feed)."""
+        binance_sym = INSTRUMENT_TO_BINANCE.get(instrument_id)
+        if binance_sym is None:
+            return None
+        return self._24h_stats.get(binance_sym.lower())
 
     def on_price_update(self, callback: Callable) -> None:
         """Register a callback for real-time price updates."""
@@ -121,6 +129,17 @@ class BinanceClient:
                                 symbol = data["s"]
                                 price = Decimal(data["c"])
                                 self._latest_prices[symbol] = price
+                                # Cache 24h stats from ticker stream
+                                self._24h_stats[symbol.lower()] = {
+                                    "lastPrice": data.get("c"),
+                                    "highPrice": data.get("h"),
+                                    "lowPrice": data.get("l"),
+                                    "volume": data.get("v"),
+                                    "quoteVolume": data.get("q"),
+                                    "priceChangePercent": data.get("P"),
+                                    "priceChange": data.get("p"),
+                                    "openPrice": data.get("o"),
+                                }
                                 # Notify callbacks
                                 instrument_ids = BINANCE_TO_INSTRUMENTS.get(
                                     symbol.lower(), []
