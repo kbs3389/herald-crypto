@@ -8,7 +8,6 @@ fiat gateway, persistent database, and WebSocket real-time feeds.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -16,25 +15,27 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from src.core.matching.order_book import OrderBook, OrderEntry, Fill
-from src.core.ledger.ledger import Ledger, LedgerEntry, LedgerTransaction, DebitCredit, EntryType
-from src.core.risk.risk_engine import RiskEngine, RiskParameters, RiskCheckRequest
+from src.core.ledger.ledger import DebitCredit, EntryType, Ledger, LedgerEntry, LedgerTransaction
 from src.core.matching.journal import CommandJournal, CommandType
-from src.services.market_data.service import MarketDataService
-from src.services.iam.service import IAMService, TokenData
-from src.services.iam.service import get_current_user, create_access_token
-from src.services.binance.client import BinanceClient, INSTRUMENT_TO_BINANCE
-from src.services.market_maker.engine import MarketMakerManager, MarketMakerConfig
+from src.core.matching.order_book import Fill, OrderBook, OrderEntry
+from src.core.risk.risk_engine import RiskCheckRequest, RiskEngine, RiskParameters
+from src.services.binance.client import INSTRUMENT_TO_BINANCE, BinanceClient
 from src.services.blockchain.adapters import ChainAdapterManager
-from src.services.fiat.gateway import PaymentGateway, PaymentMethod as GWPaymentMethod
-from src.services.database.persistence import init_db, session_scope
 from src.services.database.models import (
-    UserModel, InstrumentModel, OrderModel, TradeModel, LedgerEntryModel,
+    InstrumentModel,
+    OrderModel,
+    UserModel,
 )
+from src.services.database.persistence import init_db, session_scope
+from src.services.fiat.gateway import PaymentGateway
+from src.services.fiat.gateway import PaymentMethod as GWPaymentMethod
+from src.services.iam.service import IAMService, create_access_token, get_current_user
+from src.services.market_data.service import MarketDataService
+from src.services.market_maker.engine import MarketMakerConfig, MarketMakerManager
 
 logger = logging.getLogger(__name__)
 
@@ -663,7 +664,8 @@ async def place_order(req: PlaceOrderRequest, user: dict = Depends(get_current_u
     # Release reservation for filled quantity
     for fill in result.fills:
         if req.side == "BUY":
-            _release_reservation(user_id, inst["quote"] if inst else "USDT", fill.quantity * fill.price)
+            quote_asset = inst["quote"] if inst else "USDT"
+            _release_reservation(user_id, quote_asset, fill.quantity * fill.price)
         else:
             _release_reservation(user_id, inst["base"] if inst else "BTC", fill.quantity)
 

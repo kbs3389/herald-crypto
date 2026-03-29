@@ -1,7 +1,5 @@
 """Tests for the market-making engine."""
-import pytest
 from decimal import Decimal
-from datetime import datetime
 
 from src.core.matching.order_book import OrderBook
 from src.services.market_maker.engine import MarketMaker, MarketMakerConfig

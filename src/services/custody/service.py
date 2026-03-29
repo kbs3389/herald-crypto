@@ -6,13 +6,13 @@ address generation, and transaction tracking.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum, auto
 from typing import Optional
 from uuid import uuid4
-import hashlib
 
 
 class WalletType(Enum):

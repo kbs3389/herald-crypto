@@ -1,11 +1,13 @@
 """Tests for the fiat payment gateway."""
-import pytest
 from decimal import Decimal
 
-from src.services.fiat.service import FiatService, PaymentMethod as FiatPaymentMethod
 from src.services.fiat.gateway import (
-    PaymentGateway, PaymentMethod, PaymentStatus, GatewayProvider,
+    GatewayProvider,
+    PaymentGateway,
+    PaymentMethod,
+    PaymentStatus,
 )
+from src.services.fiat.service import FiatService
 
 
 class TestFiatService:

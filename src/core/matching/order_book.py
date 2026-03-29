@@ -7,10 +7,11 @@ Single writer per order book shard (HC-001).
 All accepted commands journaled before execution (HC-002).
 """
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from decimal import Decimal
-from typing import List, Optional, Dict
 from datetime import datetime
+from decimal import Decimal
+from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
 

@@ -1,10 +1,9 @@
 """Tests for the matching engine and order book."""
-import pytest
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
 from uuid import uuid4
 
-from src.core.matching.order_book import OrderBook, OrderEntry, Fill, MatchResult
+from src.core.matching.order_book import OrderBook, OrderEntry
 
 
 class TestOrderBook:

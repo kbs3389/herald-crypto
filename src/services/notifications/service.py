@@ -6,12 +6,12 @@ Supports user preferences, throttling, and template rendering.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
 from typing import Optional
 from uuid import uuid4
-from collections import defaultdict
 
 
 class NotificationChannel(Enum):
@@ -104,7 +104,10 @@ TEMPLATES = {
     },
     NotificationType.ORDER_PARTIALLY_FILLED: {
         "title": "Order Partially Filled",
-        "body": "Your {side} order was partially filled: {filled_qty}/{total_qty} {base} at {price}",
+        "body": (
+            "Your {side} order was partially filled: "
+            "{filled_qty}/{total_qty} {base} at {price}"
+        ),
     },
     NotificationType.DEPOSIT_CONFIRMED: {
         "title": "Deposit Confirmed",
@@ -116,7 +119,10 @@ TEMPLATES = {
     },
     NotificationType.MARGIN_CALL: {
         "title": "Margin Call",
-        "body": "Your {instrument} position requires additional margin. Current margin ratio: {ratio}%",
+        "body": (
+            "Your {instrument} position requires additional margin. "
+            "Current margin ratio: {ratio}%"
+        ),
     },
     NotificationType.LIQUIDATION_WARNING: {
         "title": "Liquidation Warning",
@@ -128,7 +134,10 @@ TEMPLATES = {
     },
     NotificationType.SECURITY_ALERT: {
         "title": "Security Alert",
-        "body": "New login detected from {location} ({ip}). If this wasn't you, secure your account.",
+        "body": (
+            "New login detected from {location} ({ip}). "
+            "If this wasn't you, secure your account."
+        ),
     },
 }
 

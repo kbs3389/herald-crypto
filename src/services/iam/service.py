@@ -11,7 +11,7 @@ from typing import Optional
 from uuid import uuid4
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 try:
     from jose import JWTError, jwt
@@ -20,6 +20,7 @@ except ImportError:
     JWTError = Exception
 
 import bcrypt
+
 
 def _hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()

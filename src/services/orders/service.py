@@ -6,13 +6,13 @@ routing, modification, cancellation, and status tracking.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum, auto
 from typing import Optional
-from uuid import UUID, uuid4
-from collections import defaultdict
+from uuid import uuid4
 
 
 class OrderStatus(Enum):

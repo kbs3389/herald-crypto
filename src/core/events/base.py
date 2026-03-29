@@ -5,10 +5,11 @@ Base event types for the event-sourced architecture.
 All economic events produce immutable ledger entries.
 """
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Optional, Any, Dict
+from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
 

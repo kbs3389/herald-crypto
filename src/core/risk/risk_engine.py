@@ -6,11 +6,12 @@ Portfolio margin bounded to well-defined risk groups (HC-014).
 All risk parameter changes are auditable (HC-015).
 """
 from __future__ import annotations
+
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum, auto
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime
 
 
 class RiskCheckResult(Enum):

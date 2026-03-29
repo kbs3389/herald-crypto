@@ -6,21 +6,35 @@ Supports PostgreSQL in production, SQLite for development.
 """
 from __future__ import annotations
 
+import enum
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
-    Column, String, Integer, Numeric, Boolean, DateTime, Text,
-    Enum as SAEnum, ForeignKey, Index, JSON, BigInteger,
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
     create_engine,
 )
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.orm import (
-    DeclarativeBase, Mapped, mapped_column, relationship,
-    Session, sessionmaker,
+    DeclarativeBase,
+    Mapped,
+    Session,
+    mapped_column,
+    sessionmaker,
 )
 from sqlalchemy.sql import func
-import enum
 
 
 class Base(DeclarativeBase):
@@ -258,5 +272,5 @@ def create_database(url: str = "sqlite:///herald_exchange.db") -> sessionmaker:
 
 def get_dev_session() -> Session:
     """Get a development database session (SQLite)."""
-    SessionLocal = create_database()
-    return SessionLocal()
+    session_factory = create_database()
+    return session_factory()

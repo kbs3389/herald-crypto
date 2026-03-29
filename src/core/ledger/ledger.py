@@ -6,11 +6,12 @@ All entries are immutable (append-only). Corrections are made via compensating e
 Balances are derived from ledger state, never manually edited. (HC-003, HC-004)
 """
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum, auto
-from typing import List, Optional, Dict, Tuple
+from typing import Dict, List, Tuple
 from uuid import UUID, uuid4
 
 

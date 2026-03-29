@@ -1,9 +1,9 @@
 """Tests for the custody service."""
-import pytest
 from decimal import Decimal
 
 from src.services.custody.service import (
-    CustodyService, WalletType, TransactionStatus, TransactionType,
+    CustodyService,
+    TransactionStatus,
 )
 
 

@@ -4,16 +4,31 @@ Herald Crypto Exchange - Core Domain Entities
 Primary domain entities representing the core business objects.
 """
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from .types import (
-    AccountId, AssetId, InstrumentId, OrderId, TradeId,
-    Money, Price, Quantity, Side, OrderType, OrderStatus, TimeInForce,
-    InstrumentType, OptionType, AccountType, KycLevel, MarginType,
+    AccountId,
+    AccountType,
+    AssetId,
+    InstrumentId,
+    InstrumentType,
+    KycLevel,
+    MarginType,
+    Money,
+    OptionType,
+    OrderId,
+    OrderStatus,
+    OrderType,
+    Price,
+    Quantity,
+    Side,
+    TimeInForce,
+    TradeId,
 )
 
 

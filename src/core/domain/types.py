@@ -4,11 +4,10 @@ Herald Crypto Exchange - Core Domain Types
 Foundational value objects and type definitions used across all bounded contexts.
 """
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum, auto
-from typing import Optional
-from datetime import datetime
 from uuid import UUID, uuid4
 
 

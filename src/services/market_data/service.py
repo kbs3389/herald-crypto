@@ -6,7 +6,6 @@ Maintains trade history, ticker stats, and orderbook snapshots.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 from collections import defaultdict
 from datetime import datetime
@@ -41,7 +40,6 @@ class MarketDataService:
 
         # Update ticker stats
         price = float(str(fill.price))
-        qty = float(str(fill.quantity))
         stats = self._ticker_stats.get(instrument_id, {
             "last_price": None, "volume_24h": "0",
             "high_24h": None, "low_24h": None,

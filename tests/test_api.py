@@ -1,6 +1,7 @@
 """Integration tests for the API gateway endpoints."""
-import pytest
 from decimal import Decimal
+
+import pytest
 from fastapi.testclient import TestClient
 
 from src.services.gateway.app import app

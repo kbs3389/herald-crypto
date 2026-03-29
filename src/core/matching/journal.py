@@ -5,10 +5,11 @@ Append-only sequenced command journal for deterministic replay.
 All accepted stateful trading commands are journaled before execution (HC-002).
 """
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import List, Optional, Dict, Any, Iterator
+from typing import Any, Dict, Iterator, List, Optional
 from uuid import UUID, uuid4
 
 
