@@ -38,18 +38,43 @@ market_data = MarketDataService()
 iam_service = IAMService()
 
 INSTRUMENTS = [
+    # ── Spot ──
     {"id": "BTC-USDT-SPOT", "base": "BTC", "quote": "USDT", "type": "SPOT",
      "tick": "0.01", "lot": "0.00001", "min_size": "0.00001", "max_size": "1000"},
     {"id": "ETH-USDT-SPOT", "base": "ETH", "quote": "USDT", "type": "SPOT",
      "tick": "0.01", "lot": "0.0001", "min_size": "0.0001", "max_size": "10000"},
-    {"id": "BTC-USDT-PERP", "base": "BTC", "quote": "USDT", "type": "PERPETUAL",
-     "tick": "0.1", "lot": "0.001", "min_size": "0.001", "max_size": "500"},
-    {"id": "ETH-USDT-PERP", "base": "ETH", "quote": "USDT", "type": "PERPETUAL",
-     "tick": "0.01", "lot": "0.01", "min_size": "0.01", "max_size": "5000"},
     {"id": "SOL-USDT-SPOT", "base": "SOL", "quote": "USDT", "type": "SPOT",
      "tick": "0.001", "lot": "0.01", "min_size": "0.01", "max_size": "100000"},
     {"id": "XRP-USDT-SPOT", "base": "XRP", "quote": "USDT", "type": "SPOT",
      "tick": "0.0001", "lot": "1", "min_size": "1", "max_size": "10000000"},
+    # ── Perpetuals ──
+    {"id": "BTC-USDT-PERP", "base": "BTC", "quote": "USDT", "type": "PERPETUAL",
+     "tick": "0.1", "lot": "0.001", "min_size": "0.001", "max_size": "500"},
+    {"id": "ETH-USDT-PERP", "base": "ETH", "quote": "USDT", "type": "PERPETUAL",
+     "tick": "0.01", "lot": "0.01", "min_size": "0.01", "max_size": "5000"},
+    {"id": "SOL-USDT-PERP", "base": "SOL", "quote": "USDT", "type": "PERPETUAL",
+     "tick": "0.001", "lot": "0.1", "min_size": "0.1", "max_size": "50000"},
+    {"id": "BNB-USDT-PERP", "base": "BNB", "quote": "USDT", "type": "PERPETUAL",
+     "tick": "0.01", "lot": "0.01", "min_size": "0.01", "max_size": "10000"},
+    # ── Options ──
+    {"id": "BTC-20260630-80000-C", "base": "BTC", "quote": "USDT", "type": "OPTION",
+     "tick": "0.1", "lot": "0.001", "min_size": "0.001", "max_size": "100",
+     "strike": "80000", "expiry": "2026-06-30", "option_type": "CALL"},
+    {"id": "BTC-20260630-80000-P", "base": "BTC", "quote": "USDT", "type": "OPTION",
+     "tick": "0.1", "lot": "0.001", "min_size": "0.001", "max_size": "100",
+     "strike": "80000", "expiry": "2026-06-30", "option_type": "PUT"},
+    {"id": "ETH-20260630-5000-C", "base": "ETH", "quote": "USDT", "type": "OPTION",
+     "tick": "0.01", "lot": "0.01", "min_size": "0.01", "max_size": "1000",
+     "strike": "5000", "expiry": "2026-06-30", "option_type": "CALL"},
+    {"id": "ETH-20260630-5000-P", "base": "ETH", "quote": "USDT", "type": "OPTION",
+     "tick": "0.01", "lot": "0.01", "min_size": "0.01", "max_size": "1000",
+     "strike": "5000", "expiry": "2026-06-30", "option_type": "PUT"},
+    {"id": "BTC-20260930-100000-C", "base": "BTC", "quote": "USDT", "type": "OPTION",
+     "tick": "0.1", "lot": "0.001", "min_size": "0.001", "max_size": "100",
+     "strike": "100000", "expiry": "2026-09-30", "option_type": "CALL"},
+    {"id": "BTC-20260930-100000-P", "base": "BTC", "quote": "USDT", "type": "OPTION",
+     "tick": "0.1", "lot": "0.001", "min_size": "0.001", "max_size": "100",
+     "strike": "100000", "expiry": "2026-09-30", "option_type": "PUT"},
 ]
 
 
@@ -62,9 +87,21 @@ def _seed_data():
             RiskParameters(
                 instrument_id=iid,
                 max_order_size=Decimal(inst["max_size"]),
-                initial_margin_rate=Decimal("0.10") if "PERP" in iid else Decimal("1.0"),
-                maintenance_margin_rate=Decimal("0.05") if "PERP" in iid else Decimal("1.0"),
-                max_leverage=Decimal("20") if "PERP" in iid else Decimal("1"),
+                initial_margin_rate=(
+                    Decimal("0.10") if "PERP" in iid
+                    else Decimal("0.20") if inst["type"] == "OPTION"
+                    else Decimal("1.0")
+                ),
+                maintenance_margin_rate=(
+                    Decimal("0.05") if "PERP" in iid
+                    else Decimal("0.10") if inst["type"] == "OPTION"
+                    else Decimal("1.0")
+                ),
+                max_leverage=(
+                    Decimal("20") if "PERP" in iid
+                    else Decimal("5") if inst["type"] == "OPTION"
+                    else Decimal("1")
+                ),
             ),
             changed_by="system",
         )
@@ -96,12 +133,41 @@ def _seed_data():
         ledger.append_transaction(txn)
 
 
+# Global reservations tracker: {user_id: {asset: Decimal}}
+_reservations: dict[str, dict[str, Decimal]] = {}
+
+
+def _reserve_balance(user_id: str, asset: str, amount: Decimal):
+    """Reserve funds for a pending order."""
+    if user_id not in _reservations:
+        _reservations[user_id] = {}
+    current = _reservations[user_id].get(asset, Decimal("0"))
+    _reservations[user_id][asset] = current + amount
+
+
+def _release_reservation(user_id: str, asset: str, amount: Decimal):
+    """Release reserved funds (on fill or cancel)."""
+    if user_id not in _reservations:
+        return
+    current = _reservations[user_id].get(asset, Decimal("0"))
+    _reservations[user_id][asset] = max(Decimal("0"), current - amount)
+
+
+def _get_reserved(user_id: str, asset: str) -> Decimal:
+    """Get the reserved amount for a user/asset."""
+    return _reservations.get(user_id, {}).get(asset, Decimal("0"))
+
+
 def _seed_book(iid: str):
     """Place initial resting orders to give the book some depth."""
     base_prices = {
         "BTC-USDT-SPOT": Decimal("67500"), "ETH-USDT-SPOT": Decimal("3450"),
         "BTC-USDT-PERP": Decimal("67520"), "ETH-USDT-PERP": Decimal("3452"),
         "SOL-USDT-SPOT": Decimal("178"), "XRP-USDT-SPOT": Decimal("0.62"),
+        "SOL-USDT-PERP": Decimal("178.5"), "BNB-USDT-PERP": Decimal("620"),
+        "BTC-20260630-80000-C": Decimal("2500"), "BTC-20260630-80000-P": Decimal("1200"),
+        "ETH-20260630-5000-C": Decimal("180"), "ETH-20260630-5000-P": Decimal("95"),
+        "BTC-20260930-100000-C": Decimal("1800"), "BTC-20260930-100000-P": Decimal("3500"),
     }
     bp = base_prices.get(iid, Decimal("100"))
     book = order_books[iid]
@@ -262,6 +328,10 @@ async def list_instruments():
             "best_ask": str(book.best_ask) if book and book.best_ask else None,
             "spread": str(book.spread) if book and book.spread else None,
         }
+        if inst["type"] == "OPTION":
+            ticker["strike"] = inst.get("strike")
+            ticker["expiry"] = inst.get("expiry")
+            ticker["option_type"] = inst.get("option_type")
         result.append(ticker)
     return {"instruments": result}
 
@@ -386,6 +456,25 @@ async def place_order(req: PlaceOrderRequest, user: dict = Depends(get_current_u
             "timestamp": fill.timestamp.isoformat(),
         })
 
+    # Reserve balance for any remaining unfilled quantity
+    inst = next((i for i in INSTRUMENTS if i["id"] == req.instrument_id), None)
+    remaining = result.remaining_quantity
+    if remaining > 0 and price and inst:
+        if req.side == "BUY":
+            reserve_asset = inst["quote"]
+            reserve_amount = remaining * price
+        else:
+            reserve_asset = inst["base"]
+            reserve_amount = remaining
+        _reserve_balance(user_id, reserve_asset, reserve_amount)
+
+    # Release reservation for filled quantity
+    for fill in result.fills:
+        if req.side == "BUY":
+            _release_reservation(user_id, inst["quote"] if inst else "USDT", fill.quantity * fill.price)
+        else:
+            _release_reservation(user_id, inst["base"] if inst else "BTC", fill.quantity)
+
     # Broadcast to WS subscribers
     await market_data.broadcast_trade(req.instrument_id, fill_dicts)
 
@@ -425,12 +514,18 @@ async def cancel_order(order_id: str, instrument_id: str = Query(...),
 @app.get("/api/v1/account/balances")
 async def get_balances(user: dict = Depends(get_current_user)):
     user_id = user["sub"]
-    assets = ["USDT", "BTC", "ETH", "SOL", "XRP"]
+    assets = ["USDT", "BTC", "ETH", "SOL", "XRP", "BNB"]
     balances = {}
     for asset in assets:
         bal = ledger.get_balance(user_id, asset)
-        if bal != 0:
-            balances[asset] = {"available": str(bal), "reserved": "0", "total": str(bal)}
+        reserved = _get_reserved(user_id, asset)
+        if bal != 0 or reserved != 0:
+            available = bal - reserved
+            balances[asset] = {
+                "available": str(available),
+                "reserved": str(reserved),
+                "total": str(bal),
+            }
     return {"balances": balances}
 
 

@@ -24,6 +24,10 @@ export interface Instrument {
   best_bid: string | null;
   best_ask: string | null;
   spread: string | null;
+  // Option-specific fields
+  strike?: string;
+  expiry?: string;
+  option_type?: 'CALL' | 'PUT';
 }
 
 export interface OrderBookLevel {

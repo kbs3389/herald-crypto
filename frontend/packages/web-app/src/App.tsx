@@ -80,6 +80,7 @@ const App: React.FC = () => {
             selectedInstrument={state.selectedInstrument}
             token={state.token}
             onSelectInstrument={selectInstrument}
+            onOrderPlaced={addOrder}
           />
         )}
         {state.activeTab === 'portfolio' && (

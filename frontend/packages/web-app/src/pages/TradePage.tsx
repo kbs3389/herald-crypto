@@ -3,7 +3,7 @@
  * Main trading interface with orderbook, trades, and order entry.
  */
 import React, { useCallback } from 'react';
-import type { PlaceOrderRequest, Instrument, Balances } from '@herald/shared';
+import type { PlaceOrderRequest, Instrument, OrderResponse } from '@herald/shared';
 import { OrderBookView } from '../components/market/OrderBookView';
 import { RecentTrades } from '../components/market/RecentTrades';
 import { TickerBar } from '../components/market/TickerBar';
@@ -15,10 +15,11 @@ interface Props {
   selectedInstrument: string;
   token: string | null;
   onSelectInstrument: (id: string) => void;
+  onOrderPlaced?: (order: OrderResponse) => void;
 }
 
 export const TradePage: React.FC<Props> = ({
-  instruments, selectedInstrument, token, onSelectInstrument,
+  instruments, selectedInstrument, token, onSelectInstrument, onOrderPlaced,
 }) => {
   const orderBook = useOrderBook(selectedInstrument);
   const trades = useRecentTrades(selectedInstrument);
@@ -27,8 +28,11 @@ export const TradePage: React.FC<Props> = ({
 
   const handleOrder = useCallback(async (req: PlaceOrderRequest) => {
     client.setToken(token);
-    await client.placeOrder(req);
-  }, [client, token]);
+    const result = await client.placeOrder(req);
+    if (onOrderPlaced) {
+      onOrderPlaced(result);
+    }
+  }, [client, token, onOrderPlaced]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
