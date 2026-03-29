@@ -1,0 +1,99 @@
+competitive_guardrails:
+- Match capability depth, product architecture, workflow coverage, and trader ergonomics inspired by Binance and OKX.
+- Do not copy logos, trademarks, names, icons, copy text, protected trade dress, or pixel-identical layouts.
+- Use parity mapping and UX benchmarking, not cloning.
+- Assume feature availability is jurisdiction-specific; all frontend flows must support feature flags, region gating, and
+  compliance messaging.
+- Assume the backend multi-agent pack already covers exchange core, ledger, custody, risk, matching, and compliance services.
+shared_context:
+  backend_dependency_reference:
+  - Use the previously generated backend pack as the source of truth for APIs, risk, ledger, custody, surveillance, and auth
+    contracts.
+  - Frontend pack should request or consume BFFs only where latency, shape normalization, or security isolation genuinely
+    justify them.
+  date_prepared: '2026-03-28'
+  goal: Create mobile, web, and native desktop trading experiences with institutional-grade performance and broad retail-to-pro
+    functionality parity inspired by publicly documented Binance and OKX features.
+  non_goals:
+  - No exact visual clone of competitor UIs.
+  - No bypass of jurisdiction rules, KYC/AML gating, or risk controls.
+  - No manipulative market-abuse tooling.
+  program_name: Institutional crypto exchange frontend pack
+  recommended_frontend_architecture:
+    desktop: Tauri or Electron shell around the pro web app; prompts assume native desktop shell with multi-window, local
+      encrypted workspace storage, system tray, auto-update, and OS notifications.
+    mobile: React Native or Flutter acceptable; default prompts assume React Native with native modules for biometrics, secure
+      storage, push notifications, and deep links.
+    monorepo: TypeScript monorepo with shared domain packages, UI tokens, API clients, schemas, analytics, and feature flags.
+    shared_state: WebSocket-first real-time data layer, resilient snapshot+diff market data model, query cache for REST reads,
+      optimistic but server-authoritative trading actions.
+    web: React + TypeScript SPA for the pro terminal; public/marketing shell may be separate if needed.
+  shared_product_principles:
+  - Simple mode for newcomers, Pro mode for active traders.
+  - One shared design system with platform-adaptive patterns.
+  - Low-latency first paint for trade surfaces and deterministic recovery after reconnects.
+  - 'Account context is always visible: account mode, margin mode, wallet/trading balance, region limits, and symbol permissions.'
+  - 'All trade surfaces must present risk-critical information clearly: fees, leverage, liquidation, funding, margin impact,
+    and reduce-only state.'
+  timezone: Asia/Kolkata
+surface_blueprints:
+  desktop:
+    must_feel_like:
+    - A native-feeling pro terminal, not just a wrapped web page
+    - Excellent keyboard and multi-monitor support
+    - Persistence of chart, order ticket, and workspace state
+    native_features:
+    - Detached panels/windows
+    - Saved workspaces
+    - Hotkeys
+    - OS-level notifications
+    - Encrypted local preferences
+    - System tray + quick actions
+    platforms:
+    - macOS
+    - Windows
+    - Linux optional, but recommended if feasible
+  mobile:
+    default_navigation:
+    - Home
+    - Markets
+    - Trade
+    - Futures
+    - Assets
+    - Profile
+    modes:
+    - Simple
+    - Pro
+    must_feel_like:
+    - Fast retail onboarding with clear asset overview
+    - Pro-grade derivatives flow without hiding critical risk data
+    - One-tap transfer, convert, and asset actions
+    platform_notes:
+    - iOS and Android with biometrics, passkeys where supported, TOTP fallback, push notifications, deep links, and safe screenshot/privacy
+      controls for sensitive flows.
+    - Must support poor network recovery, app background/foreground resync, and resumable KYC/upload tasks.
+  web:
+    layout_modes:
+    - Standard trade
+    - Advanced full-screen
+    - Options chain
+    - RFQ / multi-leg workspace
+    must_feel_like:
+    - Multi-panel trader workstation
+    - Fast symbol switching and account context retention
+    - No modal-overload on pro surfaces; favor side panels and drawers
+    routes:
+    - /markets
+    - /trade/spot/:symbol
+    - /trade/margin/:symbol
+    - /trade/perps/:contract
+    - /trade/futures/:contract
+    - /options/:underlier
+    - /copy-trading
+    - /bots
+    - /earn
+    - /p2p
+    - /assets
+    - /settings/security
+    - /settings/api
+    - /subaccounts

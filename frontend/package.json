@@ -1,0 +1,13 @@
+{
+  "name": "herald-crypto-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "packages/api-client",
+    "packages/ws-client",
+    "packages/design-system",
+    "packages/web-app",
+    "packages/mobile-app"
+  ]
+}

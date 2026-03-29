@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["vite/client", "node"],
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "paths": {
+      "@herald/shared": ["../shared/src"],
+      "@herald/api-client": ["../api-client/src"],
+      "@herald/ws-client": ["../ws-client/src"],
+      "@herald/design-system": ["../design-system/src"]
+    }
+  },
+  "include": ["src", "../shared/src", "../api-client/src", "../ws-client/src", "../design-system/src"]
+}
