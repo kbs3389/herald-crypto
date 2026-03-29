@@ -71,7 +71,11 @@ def _seed_data():
         # Seed some resting orders for demo liquidity
         _seed_book(iid)
 
-    # Seed demo user balances
+    # Register demo user in IAM first to get the real user_id
+    demo_user = iam_service.register_user("demo", "herald2026", "demo@herald.exchange")
+    demo_user_id = demo_user["user_id"]
+
+    # Seed demo user balances using the real user_id
     for asset in ["USDT", "BTC", "ETH", "SOL", "XRP"]:
         demo_amount = {
             "USDT": "1000000", "BTC": "10", "ETH": "100", "SOL": "5000", "XRP": "500000"
@@ -82,7 +86,7 @@ def _seed_data():
                 LedgerEntry(account_id="treasury", asset=asset,
                             amount=Decimal(demo_amount), direction=DebitCredit.CREDIT,
                             entry_type=EntryType.DEPOSIT),
-                LedgerEntry(account_id="demo-user", asset=asset,
+                LedgerEntry(account_id=demo_user_id, asset=asset,
                             amount=Decimal(demo_amount), direction=DebitCredit.DEBIT,
                             entry_type=EntryType.DEPOSIT),
             ),
@@ -90,9 +94,6 @@ def _seed_data():
             idempotency_key=f"seed-{asset}",
         )
         ledger.append_transaction(txn)
-
-    # Register demo user in IAM
-    iam_service.register_user("demo", "herald2026", "demo@herald.exchange")
 
 
 def _seed_book(iid: str):
