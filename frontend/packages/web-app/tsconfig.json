@@ -7,6 +7,7 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "types": ["vite/client", "node"],
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
@@ -18,5 +19,5 @@
       "@herald/design-system": ["../design-system/src"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "../shared/src", "../api-client/src", "../ws-client/src", "../design-system/src"]
 }
