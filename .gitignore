@@ -55,3 +55,6 @@ logs/
 # OS
 Thumbs.db
 .DS_Store
+herald_exchange.db
+*.db
+*.bak

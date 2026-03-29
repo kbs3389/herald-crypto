@@ -3,10 +3,13 @@ Herald Crypto Exchange - API Gateway (Agent 07)
 
 FastAPI-based API gateway providing REST endpoints for the exchange.
 Routes requests to appropriate internal services.
+Integrates: Binance market data, market maker, blockchain adapters,
+fiat gateway, persistent database, and WebSocket real-time feeds.
 """
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from decimal import Decimal
@@ -24,6 +27,16 @@ from src.core.matching.journal import CommandJournal, CommandType
 from src.services.market_data.service import MarketDataService
 from src.services.iam.service import IAMService, TokenData
 from src.services.iam.service import get_current_user, create_access_token
+from src.services.binance.client import BinanceClient, INSTRUMENT_TO_BINANCE
+from src.services.market_maker.engine import MarketMakerManager, MarketMakerConfig
+from src.services.blockchain.adapters import ChainAdapterManager
+from src.services.fiat.gateway import PaymentGateway, PaymentMethod as GWPaymentMethod
+from src.services.database.persistence import init_db, session_scope
+from src.services.database.models import (
+    UserModel, InstrumentModel, OrderModel, TradeModel, LedgerEntryModel,
+)
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +49,23 @@ risk_engine = RiskEngine()
 journal = CommandJournal(shard_id="primary")
 market_data = MarketDataService()
 iam_service = IAMService()
+
+# New service instances
+binance_client = BinanceClient()
+mm_manager = MarketMakerManager()
+chain_adapters = ChainAdapterManager()
+payment_gateway = PaymentGateway()
+
+# Fallback base prices used for seeding when Binance is unavailable
+FALLBACK_PRICES: dict[str, Decimal] = {
+    "BTC-USDT-SPOT": Decimal("67500"), "ETH-USDT-SPOT": Decimal("3450"),
+    "BTC-USDT-PERP": Decimal("67520"), "ETH-USDT-PERP": Decimal("3452"),
+    "SOL-USDT-SPOT": Decimal("178"), "XRP-USDT-SPOT": Decimal("0.62"),
+    "SOL-USDT-PERP": Decimal("178.5"), "BNB-USDT-PERP": Decimal("620"),
+    "BTC-20260630-80000-C": Decimal("2500"), "BTC-20260630-80000-P": Decimal("1200"),
+    "ETH-20260630-5000-C": Decimal("180"), "ETH-20260630-5000-P": Decimal("95"),
+    "BTC-20260930-100000-C": Decimal("1800"), "BTC-20260930-100000-P": Decimal("3500"),
+}
 
 INSTRUMENTS = [
     # ── Spot ──
@@ -78,8 +108,40 @@ INSTRUMENTS = [
 ]
 
 
+async def _fetch_and_seed_prices():
+    """Fetch real prices from Binance and update fallback prices."""
+    try:
+        prices = await binance_client.fetch_prices()
+        if prices:
+            for iid in order_books:
+                binance_price = binance_client.get_price_for_instrument(iid)
+                if binance_price:
+                    FALLBACK_PRICES[iid] = binance_price
+                    mm_manager.update_price(iid, binance_price)
+            logger.info(f"Fetched real prices from Binance: {len(prices)} symbols")
+    except Exception as e:
+        logger.warning(f"Failed to fetch Binance prices, using fallback: {e}")
+
+
+async def _on_binance_price_update(instrument_id: str, price: Decimal, raw_data: dict):
+    """Callback for real-time Binance price updates."""
+    mm_manager.update_price(instrument_id, price)
+    await market_data.broadcast_orderbook_update(instrument_id, {
+        "type": "price_update",
+        "source": "binance",
+        "instrument_id": instrument_id,
+        "price": str(price),
+        "bid": raw_data.get("b", ""),
+        "ask": raw_data.get("a", ""),
+        "volume_24h": raw_data.get("v", ""),
+        "change_pct": raw_data.get("P", ""),
+    })
+
+
 def _seed_data():
     """Seed instruments, risk params, and demo balances."""
+    init_db()
+
     for inst in INSTRUMENTS:
         iid = inst["id"]
         order_books[iid] = OrderBook(instrument_id=iid)
@@ -105,12 +167,57 @@ def _seed_data():
             ),
             changed_by="system",
         )
+
+        # Persist instrument to database
+        try:
+            with session_scope() as session:
+                existing = session.query(InstrumentModel).filter_by(id=iid).first()
+                if not existing:
+                    session.add(InstrumentModel(
+                        id=iid,
+                        instrument_type=inst["type"],
+                        base_asset=inst["base"],
+                        quote_asset=inst["quote"],
+                        tick_size=Decimal(inst["tick"]),
+                        lot_size=Decimal(inst["lot"]),
+                        min_order_size=Decimal(inst["min_size"]),
+                        max_order_size=Decimal(inst["max_size"]),
+                    ))
+        except Exception as e:
+            logger.warning(f"Could not save instrument {iid} to DB: {e}")
+
         # Seed some resting orders for demo liquidity
         _seed_book(iid)
+
+        # Set up market maker for instruments with Binance data
+        if iid in INSTRUMENT_TO_BINANCE:
+            config = MarketMakerConfig(
+                instrument_id=iid,
+                base_spread_bps=Decimal("15"),
+                num_levels=8,
+                order_size=Decimal("0.1") if "BTC" in iid else Decimal("1.0"),
+                max_position=Decimal("5") if "BTC" in iid else Decimal("50"),
+                refresh_interval=10.0,
+            )
+            mm_manager.add_maker(config, order_books[iid])
 
     # Register demo user in IAM first to get the real user_id
     demo_user = iam_service.register_user("demo", "herald2026", "demo@herald.exchange")
     demo_user_id = demo_user["user_id"]
+
+    # Save demo user to DB
+    try:
+        with session_scope() as session:
+            existing = session.query(UserModel).filter_by(username="demo").first()
+            if not existing:
+                session.add(UserModel(
+                    id=demo_user_id,
+                    username="demo",
+                    email="demo@herald.exchange",
+                    password_hash=demo_user["password_hash"],
+                ))
+    except Exception as e:
+        logger.warning(f"Could not save demo user to DB: {e}")
 
     # Seed demo user balances using the real user_id
     for asset in ["USDT", "BTC", "ETH", "SOL", "XRP"]:
@@ -160,16 +267,7 @@ def _get_reserved(user_id: str, asset: str) -> Decimal:
 
 def _seed_book(iid: str):
     """Place initial resting orders to give the book some depth."""
-    base_prices = {
-        "BTC-USDT-SPOT": Decimal("67500"), "ETH-USDT-SPOT": Decimal("3450"),
-        "BTC-USDT-PERP": Decimal("67520"), "ETH-USDT-PERP": Decimal("3452"),
-        "SOL-USDT-SPOT": Decimal("178"), "XRP-USDT-SPOT": Decimal("0.62"),
-        "SOL-USDT-PERP": Decimal("178.5"), "BNB-USDT-PERP": Decimal("620"),
-        "BTC-20260630-80000-C": Decimal("2500"), "BTC-20260630-80000-P": Decimal("1200"),
-        "ETH-20260630-5000-C": Decimal("180"), "ETH-20260630-5000-P": Decimal("95"),
-        "BTC-20260930-100000-C": Decimal("1800"), "BTC-20260930-100000-P": Decimal("3500"),
-    }
-    bp = base_prices.get(iid, Decimal("100"))
+    bp = FALLBACK_PRICES.get(iid, Decimal("100"))
     book = order_books[iid]
     spread_pct = Decimal("0.001")
     for i in range(1, 11):
@@ -191,12 +289,34 @@ def _seed_book(iid: str):
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     _seed_data()
+
+    # Start Binance real-time feed
+    try:
+        await _fetch_and_seed_prices()
+        binance_client.on_price_update(_on_binance_price_update)
+        await binance_client.start_websocket()
+        logger.info("Binance WebSocket feed started")
+    except Exception as e:
+        logger.warning(f"Binance feed failed to start (non-fatal): {e}")
+
+    # Start market makers
+    try:
+        await mm_manager.start_all()
+        logger.info("Market makers started")
+    except Exception as e:
+        logger.warning(f"Market makers failed to start (non-fatal): {e}")
+
     yield
+
+    # Cleanup
+    await mm_manager.stop_all()
+    await binance_client.close()
+    await chain_adapters.close()
 
 
 app = FastAPI(
     title="Herald Crypto Exchange",
-    version="0.1.0",
+    version="0.2.0",
     description="Institutional-grade multi-product crypto exchange API",
     lifespan=lifespan,
 )
@@ -270,6 +390,18 @@ class TransferRequest(BaseModel):
     amount: str
 
 
+class FiatDepositRequest(BaseModel):
+    amount: str
+    currency: str = "USD"
+    payment_method: str = "card"
+
+
+class FiatWithdrawRequest(BaseModel):
+    amount: str
+    currency: str = "USD"
+    payment_method: str = "bank_transfer"
+
+
 # ---------------------------------------------------------------------------
 # Auth endpoints (Agent 08 - IAM)
 # ---------------------------------------------------------------------------
@@ -279,6 +411,20 @@ async def register(req: RegisterRequest):
     user = iam_service.register_user(req.username, req.password, req.email)
     if user is None:
         raise HTTPException(400, "Username already exists")
+
+    try:
+        with session_scope() as session:
+            existing = session.query(UserModel).filter_by(username=req.username).first()
+            if not existing:
+                session.add(UserModel(
+                    id=user["user_id"],
+                    username=req.username,
+                    email=req.email,
+                    password_hash=user["password_hash"],
+                ))
+    except Exception as e:
+        logger.warning(f"Could not save user to DB: {e}")
+
     # Seed initial balance
     txn = LedgerTransaction(
         transaction_id=uuid4(),
@@ -304,7 +450,18 @@ async def login(req: LoginRequest):
     if user is None:
         raise HTTPException(401, "Invalid credentials")
     token = create_access_token({"sub": user["user_id"], "username": user["username"]})
-    return {"token": token, "user_id": user["user_id"], "username": user["username"]}
+    return {
+        "access_token": token,
+        "token": token,
+        "token_type": "bearer",
+        "user_id": user["user_id"],
+        "username": user["username"],
+    }
+
+
+@app.get("/api/v1/auth/me")
+async def get_me(user: dict = Depends(get_current_user)):
+    return {"user_id": user["sub"], "username": user.get("username", "")}
 
 
 # ---------------------------------------------------------------------------
@@ -319,9 +476,13 @@ async def list_instruments():
         book = order_books.get(iid)
         ticker = {
             "instrument_id": iid,
+            "id": iid,
+            "base": inst["base"],
+            "quote": inst["quote"],
             "base_asset": inst["base"],
             "quote_asset": inst["quote"],
             "instrument_type": inst["type"],
+            "product_type": inst["type"],
             "tick_size": inst["tick"],
             "lot_size": inst["lot"],
             "best_bid": str(book.best_bid) if book and book.best_bid else None,
@@ -332,8 +493,11 @@ async def list_instruments():
             ticker["strike"] = inst.get("strike")
             ticker["expiry"] = inst.get("expiry")
             ticker["option_type"] = inst.get("option_type")
+        binance_price = binance_client.get_price_for_instrument(iid)
+        if binance_price:
+            ticker["binance_price"] = str(binance_price)
         result.append(ticker)
-    return {"instruments": result}
+    return result
 
 
 @app.get("/api/v1/market/{instrument_id}/orderbook")
@@ -362,10 +526,31 @@ async def get_orderbook(instrument_id: str, depth: int = Query(default=20, le=10
     }
 
 
+@app.get("/api/v1/orderbook/{instrument_id}")
+async def get_orderbook_alt(instrument_id: str, depth: int = Query(default=20, le=100)):
+    book = order_books.get(instrument_id)
+    if book is None:
+        raise HTTPException(404, f"Instrument {instrument_id} not found")
+    bids = []
+    for price in sorted(book._bids.keys(), reverse=True)[:depth]:
+        level = book._bids[price]
+        bids.append([str(price), str(level.total_quantity)])
+    asks = []
+    for price in sorted(book._asks.keys())[:depth]:
+        level = book._asks[price]
+        asks.append([str(price), str(level.total_quantity)])
+    return {"bids": bids, "asks": asks}
+
+
 @app.get("/api/v1/market/{instrument_id}/trades")
 async def get_recent_trades(instrument_id: str, limit: int = Query(default=50, le=200)):
     trades = market_data.get_recent_trades(instrument_id, limit)
     return {"instrument_id": instrument_id, "trades": trades}
+
+
+@app.get("/api/v1/trades/{instrument_id}")
+async def get_trades_alt(instrument_id: str, limit: int = Query(default=50, le=200)):
+    return market_data.get_recent_trades(instrument_id, limit)
 
 
 @app.get("/api/v1/market/{instrument_id}/ticker")
@@ -374,6 +559,7 @@ async def get_ticker(instrument_id: str):
     if book is None:
         raise HTTPException(404, f"Instrument {instrument_id} not found")
     stats = market_data.get_ticker_stats(instrument_id)
+    binance_price = binance_client.get_price_for_instrument(instrument_id)
     return {
         "instrument_id": instrument_id,
         "best_bid": str(book.best_bid) if book.best_bid else None,
@@ -383,8 +569,14 @@ async def get_ticker(instrument_id: str):
         "high_24h": stats.get("high_24h"),
         "low_24h": stats.get("low_24h"),
         "change_24h_pct": stats.get("change_24h_pct", "0"),
+        "binance_price": str(binance_price) if binance_price else None,
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+
+@app.get("/api/v1/ticker/{instrument_id}")
+async def get_ticker_alt(instrument_id: str):
+    return await get_ticker(instrument_id)
 
 
 # ---------------------------------------------------------------------------
@@ -475,6 +667,25 @@ async def place_order(req: PlaceOrderRequest, user: dict = Depends(get_current_u
         else:
             _release_reservation(user_id, inst["base"] if inst else "BTC", fill.quantity)
 
+    # Persist order to database
+    try:
+        with session_scope() as session:
+            session.add(OrderModel(
+                id=str(oid),
+                client_order_id=req.client_order_id,
+                user_id=user_id,
+                instrument_id=req.instrument_id,
+                side=req.side,
+                order_type=req.order_type,
+                status=result.status,
+                quantity=qty,
+                filled_quantity=qty - result.remaining_quantity,
+                price=price,
+                time_in_force=req.time_in_force,
+            ))
+    except Exception as e:
+        logger.warning(f"Could not save order to DB: {e}")
+
     # Broadcast to WS subscribers
     await market_data.broadcast_trade(req.instrument_id, fill_dicts)
 
@@ -505,6 +716,35 @@ async def cancel_order(order_id: str, instrument_id: str = Query(...),
     if cancelled is None:
         raise HTTPException(404, "Order not found or already filled")
     return {"order_id": order_id, "status": "CANCELLED"}
+
+
+@app.get("/api/v1/orders")
+async def get_orders(user: dict = Depends(get_current_user)):
+    try:
+        with session_scope() as session:
+            orders = (
+                session.query(OrderModel)
+                .filter_by(user_id=user["sub"])
+                .order_by(OrderModel.created_at.desc())
+                .limit(100)
+                .all()
+            )
+            return [
+                {
+                    "order_id": o.id,
+                    "instrument_id": o.instrument_id,
+                    "side": o.side,
+                    "order_type": o.order_type,
+                    "status": o.status,
+                    "quantity": str(o.quantity),
+                    "price": str(o.price) if o.price else None,
+                    "filled_quantity": str(o.filled_quantity),
+                    "created_at": o.created_at.isoformat() if o.created_at else None,
+                }
+                for o in orders
+            ]
+    except Exception:
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -600,6 +840,185 @@ async def get_transactions(user: dict = Depends(get_current_user),
 # Risk endpoints (Agent 04)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Blockchain / Custody endpoints (Agents 10, 11)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/blockchain/balance/{asset}/{address}")
+async def blockchain_balance(asset: str, address: str):
+    adapter = chain_adapters.get_adapter(asset.upper())
+    if adapter is None:
+        raise HTTPException(400, f"Unsupported chain: {asset}")
+    balance = await adapter.get_balance(address)
+    if balance is None:
+        raise HTTPException(502, "Failed to fetch balance from blockchain")
+    return {
+        "address": balance.address,
+        "asset": balance.asset,
+        "balance": str(balance.balance),
+        "last_updated": balance.last_updated.isoformat(),
+    }
+
+
+@app.get("/api/v1/blockchain/tx/{asset}/{tx_hash}")
+async def blockchain_transaction(asset: str, tx_hash: str):
+    adapter = chain_adapters.get_adapter(asset.upper())
+    if adapter is None:
+        raise HTTPException(400, f"Unsupported chain: {asset}")
+    tx = await adapter.get_transaction(tx_hash)
+    if tx is None:
+        raise HTTPException(404, "Transaction not found")
+    return {
+        "tx_hash": tx.tx_hash,
+        "from": tx.from_address,
+        "to": tx.to_address,
+        "amount": str(tx.amount),
+        "asset": tx.asset,
+        "status": tx.status,
+        "block_number": tx.block_number,
+    }
+
+
+@app.get("/api/v1/blockchain/block-heights")
+async def blockchain_heights():
+    heights = await chain_adapters.get_all_block_heights()
+    return {asset: height for asset, height in heights.items()}
+
+
+@app.get("/api/v1/blockchain/fee/{asset}")
+async def blockchain_fee(asset: str):
+    adapter = chain_adapters.get_adapter(asset.upper())
+    if adapter is None:
+        raise HTTPException(400, f"Unsupported chain: {asset}")
+    fee = await adapter.estimate_fee()
+    return {"asset": asset.upper(), "estimated_fee": str(fee) if fee else None}
+
+
+# ---------------------------------------------------------------------------
+# Fiat Payment Gateway endpoints (Agent 13)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/fiat/deposit")
+async def fiat_deposit(req: FiatDepositRequest, user: dict = Depends(get_current_user)):
+    user_id = user["sub"]
+    amount = Decimal(req.amount)
+    if amount <= 0:
+        raise HTTPException(400, "Amount must be positive")
+
+    method_map = {
+        "card": GWPaymentMethod.CARD,
+        "bank_transfer": GWPaymentMethod.BANK_TRANSFER,
+        "wire": GWPaymentMethod.WIRE,
+    }
+    method = method_map.get(req.payment_method, GWPaymentMethod.CARD)
+
+    intent = payment_gateway.create_payment_intent(
+        user_id=user_id, amount=amount, currency=req.currency,
+        direction="deposit", payment_method=method,
+    )
+
+    confirmed = payment_gateway.confirm_payment(intent.intent_id)
+    if confirmed and confirmed.status.value == "succeeded":
+        txn = LedgerTransaction(
+            transaction_id=uuid4(),
+            entries=(
+                LedgerEntry(account_id="treasury", asset="USDT",
+                            amount=intent.crypto_amount, direction=DebitCredit.CREDIT,
+                            entry_type=EntryType.DEPOSIT),
+                LedgerEntry(account_id=user_id, asset="USDT",
+                            amount=intent.crypto_amount, direction=DebitCredit.DEBIT,
+                            entry_type=EntryType.DEPOSIT),
+            ),
+            entry_type=EntryType.DEPOSIT,
+            idempotency_key=f"fiat-{intent.intent_id}",
+        )
+        ledger.append_transaction(txn)
+
+    return {
+        "intent_id": intent.intent_id,
+        "status": confirmed.status.value if confirmed else "created",
+        "amount": str(intent.amount),
+        "currency": intent.currency,
+        "crypto_amount": str(intent.crypto_amount),
+        "fee": str(intent.fee),
+        "client_secret": intent.client_secret,
+    }
+
+
+@app.post("/api/v1/fiat/withdraw")
+async def fiat_withdraw(req: FiatWithdrawRequest, user: dict = Depends(get_current_user)):
+    user_id = user["sub"]
+    amount = Decimal(req.amount)
+    usdt_balance = ledger.get_balance(user_id, "USDT")
+    if amount > usdt_balance:
+        raise HTTPException(400, "Insufficient USDT balance")
+
+    method_map = {
+        "bank_transfer": GWPaymentMethod.BANK_TRANSFER,
+        "wire": GWPaymentMethod.WIRE,
+    }
+    method = method_map.get(req.payment_method, GWPaymentMethod.BANK_TRANSFER)
+
+    intent = payment_gateway.create_payment_intent(
+        user_id=user_id, amount=amount, currency=req.currency,
+        direction="withdrawal", payment_method=method,
+    )
+
+    txn = LedgerTransaction(
+        transaction_id=uuid4(),
+        entries=(
+            LedgerEntry(account_id=user_id, asset="USDT",
+                        amount=amount, direction=DebitCredit.CREDIT,
+                        entry_type=EntryType.WITHDRAWAL),
+            LedgerEntry(account_id="treasury", asset="USDT",
+                        amount=amount, direction=DebitCredit.DEBIT,
+                        entry_type=EntryType.WITHDRAWAL),
+        ),
+        entry_type=EntryType.WITHDRAWAL,
+        idempotency_key=f"fiat-wd-{intent.intent_id}",
+    )
+    ledger.append_transaction(txn)
+
+    return {
+        "intent_id": intent.intent_id,
+        "status": "processing",
+        "amount": str(intent.amount),
+        "currency": intent.currency,
+        "fee": str(intent.fee),
+    }
+
+
+@app.get("/api/v1/fiat/payments")
+async def fiat_payments(user: dict = Depends(get_current_user)):
+    payments = payment_gateway.get_user_payments(user["sub"])
+    return [
+        {
+            "intent_id": p.intent_id,
+            "direction": p.direction,
+            "amount": str(p.amount),
+            "currency": p.currency,
+            "crypto_amount": str(p.crypto_amount),
+            "status": p.status.value,
+            "fee": str(p.fee),
+            "created_at": p.created_at.isoformat(),
+        }
+        for p in payments
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Market Maker status endpoint
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/market-maker/status")
+async def market_maker_status():
+    return {"market_makers": mm_manager.get_status()}
+
+
+# ---------------------------------------------------------------------------
+# Risk endpoints (Agent 04)
+# ---------------------------------------------------------------------------
+
 @app.get("/api/v1/risk/parameters/{instrument_id}")
 async def get_risk_params(instrument_id: str):
     params = risk_engine._parameters.get(instrument_id)
@@ -620,6 +1039,11 @@ async def get_risk_params(instrument_id: str):
 # System / health endpoints
 # ---------------------------------------------------------------------------
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+
+
 @app.get("/api/v1/health")
 async def health():
     return {
@@ -628,6 +1052,23 @@ async def health():
         "instruments": len(order_books),
         "ledger_entries": ledger.entry_count,
         "journal_entries": journal.entry_count,
+        "binance_connected": binance_client._running,
+        "market_makers_active": len(mm_manager._makers),
+    }
+
+
+@app.get("/api/v1/system/info")
+async def system_info():
+    return {
+        "exchange_name": "Herald Crypto Exchange",
+        "version": "0.2.0",
+        "instruments": len(order_books),
+        "features": [
+            "spot_trading", "perpetuals", "options",
+            "real_market_data", "market_making",
+            "blockchain_adapters", "fiat_gateway",
+            "persistent_database", "websocket_feeds",
+        ],
     }
 
 
@@ -640,6 +1081,9 @@ async def system_stats():
         "journal_entries": journal.entry_count,
         "journal_sequence": journal.current_sequence,
         "registered_users": len(iam_service._users),
+        "binance_connected": binance_client._running,
+        "market_makers": len(mm_manager._makers),
+        "blockchain_adapters": ["ETH", "BTC"],
         "timestamp": datetime.utcnow().isoformat(),
     }
 
