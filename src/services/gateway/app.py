@@ -567,7 +567,10 @@ async def get_ticker(instrument_id: str):
     volume_24h = binance_24h.get("volume") if binance_24h else stats.get("volume_24h", "0")
     high_24h = binance_24h.get("highPrice") if binance_24h else stats.get("high_24h")
     low_24h = binance_24h.get("lowPrice") if binance_24h else stats.get("low_24h")
-    change_pct = binance_24h.get("priceChangePercent") if binance_24h else stats.get("change_24h_pct", "0")
+    change_pct = (
+        binance_24h.get("priceChangePercent")
+        if binance_24h else stats.get("change_24h_pct", "0")
+    )
     return {
         "instrument_id": instrument_id,
         "best_bid": str(book.best_bid) if book.best_bid else None,
